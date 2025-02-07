@@ -9,6 +9,7 @@ public static class VuluContainerBuilder {
     public static ContainerBuilder UseVuluAndPegh(this ContainerBuilder builder) {
         builder.UsePegh("Vulu", new DummyCsArgumentPrompter());
         builder.RegisterType<ProcessRunner>().As<IProcessRunner>();
+        builder.RegisterType<VuluInstaller>().As<IVuluInstaller>();
 
         return builder;
     }

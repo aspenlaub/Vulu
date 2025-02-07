@@ -9,6 +9,7 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
     private readonly IFolder _WorkingFolder = new Folder(Path.GetTempPath()).SubFolder(nameof(VuluInstaller));
 
     public bool Install(Action<string> onMessageOut, Action<string> onErrorMessageOut) {
+        _WorkingFolder.CreateIfNecessary();
         return CheckIfNodeJsIsInstalled(onMessageOut, onErrorMessageOut)
             && InstallNpmIfNecessary(onMessageOut, onErrorMessageOut)
             && InstallAngularCliIfNecessary(onMessageOut, onErrorMessageOut)
@@ -18,12 +19,31 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
     private bool CheckIfNodeJsIsInstalled(Action<string> onMessageOut, Action<string> onErrorMessageOut) {
         onMessageOut("Check if node.js is installed..");
         var errorsAndInfos = new ErrorsAndInfos();
-        processRunner.RunProcess("node", "-v", _WorkingFolder, errorsAndInfos);
+        string executable = _WorkingFolder.FullName + @"\nodejs.cmd";
+        File.WriteAllText(executable, "node -v");
+        processRunner.RunProcess(executable, "", _WorkingFolder, errorsAndInfos);
         if (errorsAndInfos.AnyErrors()) {
             errorsAndInfos.Errors.ToList().ForEach(onErrorMessageOut);
             onMessageOut("Download node.js at https://nodejs.org/en");
             return false;
         }
+
+        var versionInfos = errorsAndInfos.Infos.Where(i => i.StartsWith("v", StringComparison.InvariantCulture)).ToList();
+        if (versionInfos.Count != 1) {
+            onErrorMessageOut("Version info not found or not unique");
+            return false;
+        }
+
+        if (!Version.TryParse(versionInfos[0].Substring(1), out var version)) {
+            onErrorMessageOut("Version could not be parsed: " + versionInfos[0]);
+            return false;
+        }
+
+        if (version.Major < 22) {
+            onErrorMessageOut("Version is too low: " + version);
+            return false;
+        }
+
         onMessageOut("Done");
         return true;
     }

@@ -1,12 +1,15 @@
 ﻿using Aspenlaub.Net.GitHub.CSharp.Vulu.Components;
+using Aspenlaub.Net.GitHub.CSharp.Vulu.Interfaces;
+using Autofac;
 
 namespace Aspenlaub.Net.GitHub.CSharp.Vulu.Test;
 
 [TestClass]
-public sealed class VuluInstallerTest {
+public class VuluInstallerTest {
     [TestMethod]
     public void CanCallVuluInstaller() {
-        var sut = new VuluInstaller();
-        sut.Install(_ => { }, Assert.Fail);
+        IContainer container = new ContainerBuilder().UseVuluAndPegh().Build();
+        var sut = new VuluInstaller(container.Resolve<IProcessRunner>());
+        Assert.IsTrue(sut.Install(_ => { }, Assert.Fail));
     }
 }

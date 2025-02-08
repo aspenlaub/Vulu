@@ -76,7 +76,7 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
         }
 
         if (!Version.TryParse(node["npm"]?.ToString(), out var version)) {
-            onErrorMessageOut("Version could not be parsed: " + node["npm"]?.ToString());
+            onErrorMessageOut("Version could not be parsed: " + node["npm"]);
             return false;
         }
 
@@ -136,6 +136,40 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
 
     private bool InstallYarnIfNecessary(Action<string> onMessageOut, Action<string> onErrorMessageOut) {
         onMessageOut("Install yarn if necessary..");
+
+        var errorsAndInfos = new ErrorsAndInfos();
+        string yarnVersionExecutable = _WorkingFolder.FullName + @"\yarn_version.cmd";
+        File.WriteAllText(yarnVersionExecutable, "yarn -v");
+        processRunner.RunProcess(yarnVersionExecutable, "", _WorkingFolder, errorsAndInfos);
+        if (errorsAndInfos.AnyErrors()) {
+            errorsAndInfos = new ErrorsAndInfos();
+            string yarnInstallExecutable = _WorkingFolder.FullName + @"\yarn_install.cmd";
+            File.WriteAllText(yarnInstallExecutable, "npm install --global yarn");
+            processRunner.RunProcess(yarnInstallExecutable, "", _WorkingFolder, errorsAndInfos);
+            if (errorsAndInfos.AnyErrors()) {
+                errorsAndInfos.Errors.ToList().ForEach(onErrorMessageOut);
+                onErrorMessageOut("Yarn could not be installed");
+                return false;
+            }
+            errorsAndInfos = new ErrorsAndInfos();
+            processRunner.RunProcess(yarnVersionExecutable, "", _WorkingFolder, errorsAndInfos);
+            if (errorsAndInfos.AnyErrors()) {
+                onErrorMessageOut("Yarn could not be installed");
+                return false;
+            }
+        }
+
+        string versionInfo = errorsAndInfos.Infos[2];
+        if (!Version.TryParse(versionInfo, out var version)) {
+            onErrorMessageOut("Version could not be parsed: " + versionInfo);
+            return false;
+        }
+
+        if (version.Major < 1 || version is { Major: 1, Minor: < 22 }) {
+            onErrorMessageOut("Version is too low: " + version);
+            return false;
+        }
+
         onMessageOut("Done");
         return true;
     }

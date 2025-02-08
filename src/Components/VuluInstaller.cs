@@ -1,4 +1,6 @@
-﻿using Aspenlaub.Net.GitHub.CSharp.Pegh.Entities;
+﻿using System.Text.Json;
+using System.Text.Json.Nodes;
+using Aspenlaub.Net.GitHub.CSharp.Pegh.Entities;
 using Aspenlaub.Net.GitHub.CSharp.Pegh.Extensions;
 using Aspenlaub.Net.GitHub.CSharp.Pegh.Interfaces;
 using Aspenlaub.Net.GitHub.CSharp.Vulu.Interfaces;
@@ -11,7 +13,7 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
     public bool Install(Action<string> onMessageOut, Action<string> onErrorMessageOut) {
         _WorkingFolder.CreateIfNecessary();
         return CheckIfNodeJsIsInstalled(onMessageOut, onErrorMessageOut)
-            && InstallNpmIfNecessary(onMessageOut, onErrorMessageOut)
+            && CheckIfNpmIsInstalled(onMessageOut, onErrorMessageOut)
             && InstallAngularCliIfNecessary(onMessageOut, onErrorMessageOut)
             && InstallYarnIfNecessary(onMessageOut, onErrorMessageOut);
     }
@@ -48,8 +50,41 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
         return true;
     }
 
-    private bool InstallNpmIfNecessary(Action<string> onMessageOut, Action<string> onErrorMessageOut) {
-        onMessageOut("Install npm if necessary..");
+    private bool CheckIfNpmIsInstalled(Action<string> onMessageOut, Action<string> onErrorMessageOut) {
+        onMessageOut("Check if npm is installed..");
+        var errorsAndInfos = new ErrorsAndInfos();
+        string executable = _WorkingFolder.FullName + @"\npm_version.cmd";
+        File.WriteAllText(executable, "npm version --silent");
+        processRunner.RunProcess(executable, "", _WorkingFolder, errorsAndInfos);
+        if (errorsAndInfos.AnyErrors()) {
+            errorsAndInfos.Errors.ToList().ForEach(onErrorMessageOut);
+            onMessageOut("Download npm at https://nodejs.org/en");
+            return false;
+        }
+
+        var jsonList = errorsAndInfos.Infos.ToList();
+        jsonList.RemoveRange(0, 2);
+        string jsonString = string.Join(' ', jsonList);
+        jsonString = jsonString.Replace("{   ", "{   \"");
+        jsonString = jsonString.Replace(": '", "\": \"");
+        jsonString = jsonString.Replace("' }", "\" }");
+        jsonString = jsonString.Replace("',   ", "\", \"");
+        JsonNode? node = JsonSerializer.Deserialize<JsonNode>(jsonString);
+        if (node?["npm"] is null) {
+            onErrorMessageOut("Could not find npm version");
+            return false;
+        }
+
+        if (!Version.TryParse(node["npm"]?.ToString(), out var version)) {
+            onErrorMessageOut("Version could not be parsed: " + node["npm"]?.ToString());
+            return false;
+        }
+
+        if (version.Major < 10) {
+            onErrorMessageOut("Version is too low: " + version);
+            return false;
+        }
+
         onMessageOut("Done");
         return true;
     }

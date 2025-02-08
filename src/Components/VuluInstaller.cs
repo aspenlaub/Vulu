@@ -91,6 +91,45 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
 
     private bool InstallAngularCliIfNecessary(Action<string> onMessageOut, Action<string> onErrorMessageOut) {
         onMessageOut("Install angular cli if necessary..");
+        var errorsAndInfos = new ErrorsAndInfos();
+        string ngVersionExecutable = _WorkingFolder.FullName + @"\ng_version.cmd";
+        File.WriteAllText(ngVersionExecutable, "ng version");
+        processRunner.RunProcess(ngVersionExecutable, "", _WorkingFolder, errorsAndInfos);
+        if (errorsAndInfos.AnyErrors()) {
+            errorsAndInfos = new ErrorsAndInfos();
+            string ngInstallExecutable = _WorkingFolder.FullName + @"\ng_install.cmd";
+            File.WriteAllText(ngInstallExecutable, "npm i -g @angular/cli");
+            processRunner.RunProcess(ngInstallExecutable, "", _WorkingFolder, errorsAndInfos);
+            if (errorsAndInfos.AnyErrors()) {
+                errorsAndInfos.Errors.ToList().ForEach(onErrorMessageOut);
+                onErrorMessageOut("Angular cli could not be installed");
+                return false;
+            }
+            errorsAndInfos = new ErrorsAndInfos();
+            processRunner.RunProcess(ngVersionExecutable, "", _WorkingFolder, errorsAndInfos);
+            if (errorsAndInfos.AnyErrors()) {
+                onErrorMessageOut("Angular cli could not be installed");
+                return false;
+            }
+        }
+
+        string? versionInfo = errorsAndInfos.Infos.FirstOrDefault(i => i.StartsWith("Angular CLI:"));
+        if (versionInfo is null) {
+            onErrorMessageOut("Could not find angular cli version");
+            return false;
+        }
+
+        versionInfo = versionInfo.Substring(versionInfo.IndexOf(':') + 1);
+        if (!Version.TryParse(versionInfo, out var version)) {
+            onErrorMessageOut("Version could not be parsed: " + versionInfo);
+            return false;
+        }
+
+        if (version.Major < 19) {
+            onErrorMessageOut("Version is too low: " + version);
+            return false;
+        }
+
         onMessageOut("Done");
         return true;
     }

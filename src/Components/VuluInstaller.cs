@@ -12,10 +12,11 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
 
     public bool Install(Action<string> onMessageOut, Action<string> onErrorMessageOut) {
         _WorkingFolder.CreateIfNecessary();
-        return CheckIfNodeJsIsInstalled(onMessageOut, onErrorMessageOut)
-            && CheckIfNpmIsInstalled(onMessageOut, onErrorMessageOut)
-            && InstallAngularCliIfNecessary(onMessageOut, onErrorMessageOut)
-            && InstallYarnIfNecessary(onMessageOut, onErrorMessageOut);
+        return CheckIfNodeJsIsInstalled(onMessageOut, onErrorMessageOut) &&
+               CheckIfNpmIsInstalled(onMessageOut, onErrorMessageOut) &&
+               InstallAngularCliIfNecessary(onMessageOut, onErrorMessageOut) &&
+               InstallYarnIfNecessary(onMessageOut, onErrorMessageOut) &&
+               InstallNpxIfNecessary(onMessageOut, onErrorMessageOut);
     }
 
     private bool CheckIfNodeJsIsInstalled(Action<string> onMessageOut, Action<string> onErrorMessageOut) {
@@ -36,7 +37,7 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
             return false;
         }
 
-        if (!Version.TryParse(versionInfos[0].Substring(1), out var version)) {
+        if (!Version.TryParse(versionInfos[0].Substring(1), out Version? version)) {
             onErrorMessageOut("Version could not be parsed: " + versionInfos[0]);
             return false;
         }
@@ -75,7 +76,7 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
             return false;
         }
 
-        if (!Version.TryParse(node["npm"]?.ToString(), out var version)) {
+        if (!Version.TryParse(node["npm"]?.ToString(), out Version? version)) {
             onErrorMessageOut("Version could not be parsed: " + node["npm"]);
             return false;
         }
@@ -105,6 +106,7 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
                 onErrorMessageOut("Angular cli could not be installed");
                 return false;
             }
+
             errorsAndInfos = new ErrorsAndInfos();
             processRunner.RunProcess(ngVersionExecutable, "", _WorkingFolder, errorsAndInfos);
             if (errorsAndInfos.AnyErrors()) {
@@ -120,7 +122,7 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
         }
 
         versionInfo = versionInfo.Substring(versionInfo.IndexOf(':') + 1);
-        if (!Version.TryParse(versionInfo, out var version)) {
+        if (!Version.TryParse(versionInfo, out Version? version)) {
             onErrorMessageOut("Version could not be parsed: " + versionInfo);
             return false;
         }
@@ -151,6 +153,7 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
                 onErrorMessageOut("Yarn could not be installed");
                 return false;
             }
+
             errorsAndInfos = new ErrorsAndInfos();
             processRunner.RunProcess(yarnVersionExecutable, "", _WorkingFolder, errorsAndInfos);
             if (errorsAndInfos.AnyErrors()) {
@@ -160,7 +163,7 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
         }
 
         string versionInfo = errorsAndInfos.Infos[2];
-        if (!Version.TryParse(versionInfo, out var version)) {
+        if (!Version.TryParse(versionInfo, out Version? version)) {
             onErrorMessageOut("Version could not be parsed: " + versionInfo);
             return false;
         }
@@ -174,4 +177,45 @@ public class VuluInstaller(IProcessRunner processRunner) : IVuluInstaller {
         return true;
     }
 
+    private bool InstallNpxIfNecessary(Action<string> onMessageOut, Action<string> onErrorMessageOut) {
+        onMessageOut("Install npx if necessary..");
+
+        if (!IsNpxInstalled()) {
+            var errorsAndInfos = new ErrorsAndInfos();
+            string npxInstallExecutable = _WorkingFolder.FullName + @"\npx_install.cmd";
+            File.WriteAllText(npxInstallExecutable, "npm i -g npx");
+            processRunner.RunProcess(npxInstallExecutable, "", _WorkingFolder, errorsAndInfos);
+            if (errorsAndInfos.AnyErrors()) {
+                errorsAndInfos.Errors.ToList().ForEach(onErrorMessageOut);
+                onErrorMessageOut("Npx could not be installed");
+                return false;
+            }
+            if (!IsNpxInstalled()) {
+                onErrorMessageOut("Npx could not be installed");
+                return false;
+            }
+        }
+
+        onMessageOut("Done");
+        return true;
+    }
+
+    private bool IsNpxInstalled() {
+        var errorsAndInfos = new ErrorsAndInfos();
+        string npxWhereExecutable = _WorkingFolder.FullName + @"\npx_where.cmd";
+        File.WriteAllText(npxWhereExecutable, "where npx.cmd");
+        processRunner.RunProcess(npxWhereExecutable, "", _WorkingFolder, errorsAndInfos);
+        bool installed = !errorsAndInfos.AnyErrors();
+        if (!installed) {
+            return installed;
+        }
+
+        IFolder? folder = new Folder(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData))
+            .SubFolder("npm");
+        string npxCmdExpectedLocation = folder.FullName + @"\npx.cmd";
+        installed = errorsAndInfos.Infos.Any(i
+            => i.Contains(npxCmdExpectedLocation, StringComparison.InvariantCultureIgnoreCase));
+
+        return installed;
+    }
 }

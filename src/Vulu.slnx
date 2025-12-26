@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Test/Vulu.Test.csproj" />
+  <Project Path="Vulu.csproj" />
+</Solution>
